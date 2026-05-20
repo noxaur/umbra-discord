@@ -2,6 +2,7 @@
 #define DISCORD_MARKDOWN_H
 
 #include <QString>
+#include <QMap>
 
 class DiscordMarkdown {
 public:
@@ -21,7 +22,8 @@ private:
     static QString processSpoilers(const QString &text);
     static QString processLinks(const QString &text);
     static QString processMentions(const QString &text);
-    static QString processTimestamps(const QString &text);
+    static QString extractMentions(const QString &text, QMap<QString, QString> &placeholders);
+    static QString extractTimestamps(const QString &text, QMap<QString, QString> &placeholders);
     static QString formatDuration(qint64 seconds);
     static QString processAutoLinks(const QString &text);
 };

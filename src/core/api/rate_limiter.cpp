@@ -10,6 +10,8 @@ RateLimiter::RateLimiter(QObject *parent)
         m_globalLimited = false;
         emit bucketReady(QStringLiteral("global"));
     });
+
+    connect(this, &RateLimiter::bucketReady, this, &RateLimiter::processQueue);
 }
 
 RateLimiter::~RateLimiter()
@@ -48,6 +50,53 @@ bool RateLimiter::canProceed(const QString &bucket)
     }
 
     return true;
+}
+
+void RateLimiter::queueRequest(const QString &bucket, std::function<void()> callback)
+{
+    if (static_cast<int>(m_queue.size()) >= kMaxQueueSize) {
+        qWarning() << "[RateLimiter] Queue full, dropping request";
+        return;
+    }
+    m_queue.enqueue({bucket, std::move(callback)});
+}
+
+void RateLimiter::processQueue()
+{
+    if (m_processing) return;
+    m_processing = true;
+
+    QQueue<QueuedRequest> pending;
+    while (!m_queue.isEmpty()) {
+        pending.enqueue(m_queue.dequeue());
+    }
+
+    while (!pending.isEmpty()) {
+        auto req = pending.dequeue();
+        if (m_globalLimited) {
+            m_queue.enqueue(std::move(req));
+            continue;
+        }
+
+        auto it = m_buckets.constFind(req.bucket);
+        bool bucketBlocked = (it != m_buckets.constEnd() &&
+                              it->remaining <= 0 &&
+                              it->releaseTimer &&
+                              it->releaseTimer->isActive());
+
+        if (bucketBlocked) {
+            m_queue.enqueue(std::move(req));
+            continue;
+        }
+
+        if (it != m_buckets.constEnd() && it->remaining > 0) {
+            m_buckets[req.bucket].remaining--;
+        }
+
+        req.callback();
+    }
+
+    m_processing = false;
 }
 
 void RateLimiter::recordResponse(const QString &bucket, int limit, int remaining, qint64 resetAfterMs, bool isGlobal)

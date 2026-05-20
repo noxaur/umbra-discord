@@ -1,5 +1,6 @@
 #include "core/formatting/attachment_renderer.h"
 #include "core/formatting/discord_markdown.h"
+#include "core/utils.h"
 #include <QString>
 
 QString AttachmentRenderer::toHtml(const Attachment &attachment)
@@ -50,10 +51,4 @@ QString AttachmentRenderer::formatFileSize(int bytes)
     if (bytes < 1024) return QStringLiteral("%1 B").arg(bytes);
     if (bytes < 1024 * 1024) return QStringLiteral("%1 KB").arg(bytes / 1024.0, 0, 'f', 1);
     return QStringLiteral("%1 MB").arg(bytes / (1024.0 * 1024.0), 0, 'f', 1);
-}
-
-bool AttachmentRenderer::isSafeUrl(const QString &url)
-{
-    QString lower = url.toLower().trimmed();
-    return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("/");
 }

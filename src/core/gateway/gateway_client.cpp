@@ -60,7 +60,10 @@ void GatewayClient::connectToGateway(const QString &url)
     qCDebug(discordGateway) << "Connecting to:" << url;
 
     // Create a fresh WebSocket for each connection attempt
-    delete m_websocket;
+    if (m_websocket) {
+        m_websocket->abort();
+        m_websocket->deleteLater();
+    }
     m_websocket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
     // Reconnect signals to the new socket
@@ -144,7 +147,8 @@ void GatewayClient::onDisconnected()
             qCWarning(discordGateway) << "Attempting reconnect with resume in" << delay << "ms...";
             QString reconnectUrl = m_session.resumeGatewayUrl.isEmpty() ? m_gatewayUrl : m_session.resumeGatewayUrl;
 
-            delete m_websocket;
+            m_websocket->abort();
+            m_websocket->deleteLater();
             m_websocket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
             connect(m_websocket, &QWebSocket::connected, this, &GatewayClient::onConnected);

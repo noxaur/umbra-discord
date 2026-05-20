@@ -1,12 +1,14 @@
 #include "core/formatting/embed_renderer.h"
 #include "core/formatting/discord_markdown.h"
+#include "core/ui/theme.h"
+#include "core/utils.h"
 #include <QString>
 
 QString EmbedRenderer::toHtml(const Embed &embed)
 {
     QString color = embedColorHex(embed);
 
-    QString html = QStringLiteral("<div class=\"embed\" style=\"border-left-color: %1;\">").arg(color);
+    QString html = QStringLiteral("<div class=\"embed\" style=\"border-left: 4px solid %1;\">").arg(color);
 
     html += renderAuthor(embed);
     html += renderTitle(embed);
@@ -22,10 +24,27 @@ QString EmbedRenderer::toHtml(const Embed &embed)
 
 QString EmbedRenderer::renderAuthor(const Embed &embed)
 {
-    if (!embed.title.has_value() && !embed.description.has_value()) {
+    if (!embed.authorName.has_value()) {
         return QString();
     }
-    return QString();
+
+    QString name = DiscordMarkdown::escapeHtml(embed.authorName.value());
+    QString html = QStringLiteral("<div class=\"embed-author\">");
+
+    if (embed.authorIconUrl.has_value() && isSafeUrl(embed.authorIconUrl.value())) {
+        html += QStringLiteral("<img src=\"%1\" class=\"embed-author-icon\"/>")
+            .arg(embed.authorIconUrl.value());
+    }
+
+    if (embed.authorUrl.has_value() && isSafeUrl(embed.authorUrl.value())) {
+        html += QStringLiteral("<a href=\"%1\" class=\"embed-author-name\">%2</a>")
+            .arg(embed.authorUrl.value(), name);
+    } else {
+        html += QStringLiteral("<span class=\"embed-author-name\">%1</span>").arg(name);
+    }
+
+    html += QStringLiteral("</div>");
+    return html;
 }
 
 QString EmbedRenderer::renderTitle(const Embed &embed)
@@ -95,7 +114,8 @@ QString EmbedRenderer::renderFooter(const Embed &embed)
 
 QString EmbedRenderer::embedColorHex(const Embed &embed)
 {
-    if (!embed.color.has_value()) return "#5865f2";
+    if (!embed.color.has_value())
+        return ThemeManager::instance().currentTheme().accentBlue;
 
     int color = embed.color.value();
     int r = (color >> 16) & 0xFF;
@@ -105,10 +125,4 @@ QString EmbedRenderer::embedColorHex(const Embed &embed)
         .arg(r, 2, 16, QChar('0'))
         .arg(g, 2, 16, QChar('0'))
         .arg(b, 2, 16, QChar('0'));
-}
-
-bool EmbedRenderer::isSafeUrl(const QString &url)
-{
-    QString lower = url.toLower().trimmed();
-    return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("/");
 }

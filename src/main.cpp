@@ -21,11 +21,14 @@
 #include <QDebug>
 #include <QSettings>
 #include <QToolButton>
+#include <QGroupBox>
+#include <QTabWidget>
 #include "core/client.h"
 #include "core/formatting/discord_markdown.h"
 #include "core/formatting/embed_renderer.h"
 #include "core/formatting/attachment_renderer.h"
 #include "core/ui/theme.h"
+#include "core/utils.h"
 
 class MainWindow : public QMainWindow
 {
@@ -99,10 +102,10 @@ public:
 
         m_settingsBtn = new QToolButton(mainWidget);
         m_settingsBtn->setObjectName("settingsBtn");
-        m_settingsBtn->setText("⚙");
+        m_settingsBtn->setText("Options");
         m_settingsBtn->setToolTip("Settings");
         m_settingsBtn->setCursor(Qt::PointingHandCursor);
-        m_settingsBtn->setFixedSize(32, 32);
+        m_settingsBtn->setFixedSize(64, 32);
         topBar->addWidget(m_settingsBtn);
         mainLayout->addLayout(topBar);
 
@@ -122,7 +125,6 @@ public:
         loginBar->addWidget(m_tokenInput, 1);
 
         m_loginBtn = new QPushButton("Connect", m_loginBarWidget);
-        m_loginBtn->setFixedWidth(90);
         loginBar->addWidget(m_loginBtn);
         mainLayout->addWidget(m_loginBarWidget);
 
@@ -138,9 +140,11 @@ public:
 
         // Separator line
         auto *sep = new QFrame(mainWidget);
-        sep->setFrameShape(QFrame::HLine);
-        sep->setStyleSheet("background-color: #1e1f22;");
+        sep->setObjectName("separatorLine");
+        sep->setFrameShape(QFrame::NoFrame);
         sep->setFixedHeight(1);
+        sep->setMinimumHeight(1);
+        sep->setMaximumHeight(1);
         mainLayout->addWidget(sep);
 
         // Message view
@@ -161,7 +165,6 @@ public:
         inputLayout->addWidget(m_messageInput, 1);
 
         m_sendBtn = new QPushButton("Send", mainWidget);
-        m_sendBtn->setFixedWidth(70);
         m_sendBtn->setEnabled(false);
         inputLayout->addWidget(m_sendBtn);
         mainLayout->addLayout(inputLayout);
@@ -174,7 +177,6 @@ public:
 
         // Menu bar
         auto *menuBar = this->menuBar();
-        menuBar->setStyleSheet("background-color: #313338; color: #dbdee1; border: none;");
         auto *helpMenu = menuBar->addMenu("&Help");
         auto *aboutAction = helpMenu->addAction("&About");
         connect(aboutAction, &QAction::triggered, this, [this]() {
@@ -189,6 +191,11 @@ public:
 
         // Inject message CSS into QTextEdit document
         m_messageView->document()->setDefaultStyleSheet(ThemeManager::instance().regenerateMessageCSS());
+
+        // Update message CSS when theme changes
+        connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](const Theme &) {
+            m_messageView->document()->setDefaultStyleSheet(ThemeManager::instance().regenerateMessageCSS());
+        });
 
         // Signal connections
         connect(m_loginBtn, &QPushButton::clicked, this, &MainWindow::onLoginClicked);
@@ -281,10 +288,10 @@ private slots:
             }
 
             auto *chItem = new QTreeWidgetItem(parent);
-            chItem->setText(0, "🔊 " + channel.name);
+            chItem->setText(0, QString::fromUtf8("\u25B6 ") + channel.name);
             chItem->setData(0, Qt::UserRole, channel.id.toString());
             chItem->setData(0, Qt::UserRole + 1, "voice");
-            chItem->setForeground(0, QBrush(QColor("#80848e")));
+            chItem->setForeground(0, QBrush(QColor(ThemeManager::instance().currentTheme().mute)));
             return;
         }
     }
@@ -292,6 +299,17 @@ private slots:
     void onMessagesLoaded(const QList<Message> &messages)
     {
         m_messageView->clear();
+        m_lastAuthorId.clear();
+        m_messageCount = 0;
+        if (messages.isEmpty()) {
+            m_messageView->append(
+                "<div class=\"empty-state\">"
+                "<div class=\"empty-state-title\">No messages yet</div>"
+                "<div class=\"empty-state-body\">Start the conversation in this channel.</div>"
+                "</div>"
+            );
+            return;
+        }
         for (const auto &msg : messages) {
             appendMessage(msg);
         }
@@ -325,52 +343,60 @@ private slots:
         auto *dialog = new QDialog(this);
         dialog->setWindowTitle("Settings");
         dialog->setModal(true);
-        dialog->setFixedSize(400, 200);
-        dialog->setStyleSheet(
-            "QDialog { background-color: #313338; color: #dbdee1; }"
-            "QLabel { color: #dbdee1; font-size: 14px; }"
-            "QLineEdit { background-color: #1e1f22; color: #dbdee1; border: 1px solid #404249; border-radius: 4px; padding: 8px; }"
-            "QPushButton { background-color: #5865f2; color: #ffffff; border: none; border-radius: 4px; padding: 8px 16px; font-weight: 600; }"
-            "QPushButton:hover { background-color: #4752c4; }"
-        );
+        dialog->resize(420, 300);
+        dialog->setMinimumSize(360, 260);
 
         auto *layout = new QVBoxLayout(dialog);
-        layout->setSpacing(12);
+        layout->setSpacing(0);
+        layout->setContentsMargins(12, 12, 12, 12);
 
-        auto *themeLabel = new QLabel("Theme:", dialog);
-        layout->addWidget(themeLabel);
+        auto *tabs = new QTabWidget(dialog);
 
-        auto *themeCombo = new QComboBox(dialog);
+        // -- Appearance tab --
+        auto *appearanceTab = new QWidget();
+        auto *appearanceLayout = new QVBoxLayout(appearanceTab);
+        appearanceLayout->setSpacing(8);
+
+        auto *themeLabel = new QLabel("Theme:");
+        appearanceLayout->addWidget(themeLabel);
+
+        auto *themeCombo = new QComboBox(appearanceTab);
         themeCombo->addItems({"Raycast", "Discord"});
         themeCombo->setCurrentText(ThemeManager::instance().currentTheme().name);
-        themeCombo->setStyleSheet(
-            "QComboBox { background-color: #1e1f22; color: #dbdee1; border: 1px solid #404249; border-radius: 4px; padding: 8px; }"
-            "QComboBox::drop-down { border: none; }"
-        );
-        layout->addWidget(themeCombo);
+        appearanceLayout->addWidget(themeCombo);
 
-        auto *label = new QLabel("Bot Token:", dialog);
-        layout->addWidget(label);
+        auto *saveThemeBtn = new QPushButton("Apply Theme", appearanceTab);
+        appearanceLayout->addWidget(saveThemeBtn);
+        appearanceLayout->addStretch();
+        tabs->addTab(appearanceTab, "Appearance");
 
-        auto *tokenEdit = new QLineEdit(dialog);
+        // -- Connection tab --
+        auto *connectionTab = new QWidget();
+        auto *connectionLayout = new QVBoxLayout(connectionTab);
+        connectionLayout->setSpacing(8);
+
+        auto *tokenLabel = new QLabel("Bot Token:");
+        connectionLayout->addWidget(tokenLabel);
+
+        auto *tokenEdit = new QLineEdit(connectionTab);
         tokenEdit->setEchoMode(QLineEdit::Password);
         tokenEdit->setText(m_savedToken);
-        layout->addWidget(tokenEdit);
+        tokenEdit->setPlaceholderText("Bot token");
+        connectionLayout->addWidget(tokenEdit);
 
-        auto *btnLayout = new QHBoxLayout();
-        btnLayout->addStretch();
+        auto *saveTokenBtn = new QPushButton("Save & Reconnect", connectionTab);
+        connectionLayout->addWidget(saveTokenBtn);
+        connectionLayout->addStretch();
+        tabs->addTab(connectionTab, "Connection");
 
-        auto *saveBtn = new QPushButton("Save & Reconnect", dialog);
-        btnLayout->addWidget(saveBtn);
+        layout->addWidget(tabs);
 
-        auto *cancelBtn = new QPushButton("Cancel", dialog);
-        cancelBtn->setStyleSheet("QPushButton { background-color: #404249; } QPushButton:hover { background-color: #4e5058; }");
-        btnLayout->addWidget(cancelBtn);
+        // Close button
+        auto *closeBtn = new QPushButton("Close", dialog);
+        layout->addWidget(closeBtn, 0, Qt::AlignRight);
 
-        layout->addLayout(btnLayout);
-
-        connect(cancelBtn, &QPushButton::clicked, dialog, &QDialog::reject);
-        connect(saveBtn, &QPushButton::clicked, this, [this, dialog, tokenEdit, themeCombo]() {
+        // Theme change — only updates stylesheet, doesn't touch token or reconnect
+        connect(saveThemeBtn, &QPushButton::clicked, this, [this, themeCombo]() {
             QString newTheme = themeCombo->currentText();
             if (newTheme != ThemeManager::instance().currentTheme().name) {
                 ThemeManager::instance().setTheme(newTheme);
@@ -378,36 +404,33 @@ private slots:
                 settings.setValue("theme_name", newTheme);
                 qApp->setStyleSheet(ThemeManager::instance().regenerateQSS());
             }
+        });
 
+        // Token change — only saves token and reconnects, doesn't touch theme
+        connect(saveTokenBtn, &QPushButton::clicked, this, [this, tokenEdit]() {
             QString newToken = tokenEdit->text().trimmed();
-            if (!newToken.isEmpty()) {
+            if (!newToken.isEmpty() && newToken != m_savedToken) {
                 m_savedToken = newToken;
                 QSettings settings("Umbra", "discord-qt");
                 settings.setValue("bot_token", newToken);
 
-                // Disconnect if connected
                 m_client.disconnect();
-
-                // Show login bar again
                 m_loginBarWidget->setVisible(true);
                 m_tokenInput->setText(newToken);
                 m_loginBtn->setEnabled(true);
                 m_tokenInput->setEnabled(true);
-
-                // Auto-connect with new token
                 statusBar()->showMessage("Reconnecting...");
                 m_client.login(newToken);
             }
-            dialog->accept();
         });
+
+        connect(closeBtn, &QPushButton::clicked, dialog, &QDialog::accept);
 
         dialog->exec();
     }
 
     void onReady()
     {
-        statusBar()->showMessage("Connected");
-
         auto self = m_client.cache()->self();
         QString tag = self.globalName.value_or(self.username);
         setWindowTitle(QString("Umbra — %1").arg(tag));
@@ -422,6 +445,8 @@ private slots:
         m_loginBarWidget->setVisible(false);
         m_messageInput->setEnabled(true);
         m_sendBtn->setEnabled(true);
+
+        statusBar()->showMessage(QString("Connected as %1 · %2 servers").arg(tag, QString::number(guilds.size())));
 
         if (m_serverList->count() > 0) {
             m_serverList->setCurrentRow(0);
@@ -452,7 +477,15 @@ private slots:
 
         m_channelNameLabel->setVisible(false);
         m_messageView->clear();
+        m_messageView->append(
+            "<div class=\"empty-state\">"
+            "<div class=\"empty-state-title\">Select a channel</div>"
+            "<div class=\"empty-state-body\">Choose a text channel from the list to view messages.</div>"
+            "</div>"
+        );
         m_currentChannelId = Snowflake("");
+        m_lastAuthorId.clear();
+        m_messageCount = 0;
     }
 
     void onChannelTreeChanged(QTreeWidgetItem *current, QTreeWidgetItem *)
@@ -469,7 +502,13 @@ private slots:
         m_sendBtn->setEnabled(true);
 
         m_messageView->clear();
-        m_messageView->append("<span style=\"color: #80848e;\">Loading messages...</span>");
+        m_messageView->append(QString(
+            "<div class=\"loading-skeleton\">"
+            "<div class=\"skeleton-row\"></div>"
+            "<div class=\"skeleton-row\"></div>"
+            "<div class=\"skeleton-row short\"></div>"
+            "</div>"
+        ));
 
         m_client.fetchChannelMessages(channelId, 50);
     }
@@ -517,8 +556,9 @@ private slots:
 
     void onError(const QString &message)
     {
-        m_messageView->append(QString("<span style=\"color: #f23f43;\">Error: %1</span>").arg(message));
-        statusBar()->showMessage("Error");
+        m_messageView->append(QString("<span style=\"color: %1;\">Error: %2</span>")
+            .arg(ThemeManager::instance().currentTheme().accentRed, message));
+        statusBar()->showMessage(QString("Error: %1").arg(message));
         m_loginBtn->setEnabled(true);
         m_loginBtn->setText("Connect");
         m_tokenInput->setEnabled(true);
@@ -527,47 +567,45 @@ private slots:
 private:
     void appendMessage(const Message &msg)
     {
+        bool isContinuation = (m_lastAuthorId == msg.author.id.toString() && m_messageCount > 0);
+        m_lastAuthorId = msg.author.id.toString();
+        m_messageCount++;
+
         QString tag = DiscordMarkdown::escapeHtml(msg.author.globalName.value_or(msg.author.username));
         QString timeStr = msg.timestamp.isValid() ? msg.timestamp.toString("HH:mm") : "";
+        QColor authorColor = hashColor(msg.author.id.toString());
 
-        // Build message header
-        QString header = QString(
-            "<div class=\"message-content\" style=\"margin: 4px 0;\">"
-            "<span style=\"color: %1; font-weight: 600;\">%2</span>"
-            "<span style=\"color: %3; font-size: 12px; margin-left: 6px;\">%4</span>"
-            "</div>"
-        ).arg(ThemeManager::instance().currentTheme().accentBlue,
-              tag,
-              ThemeManager::instance().currentTheme().mute,
-              timeStr);
+        if (!isContinuation) {
+            QString header = QString(
+                "<div class=\"message-header\" style=\"margin: 12px 0 2px 0;\">"
+                "<span style=\"color: %1; font-weight: 600;\">%2</span>"
+                "<span style=\"color: %3; font-size: 12px; margin-left: 6px;\">%4</span>"
+                "</div>"
+            ).arg(authorColor.name(), tag, ThemeManager::instance().currentTheme().mute, timeStr);
+            m_messageView->append(header);
 
-        m_messageView->append(header);
-
-        // Show edited indicator if message was edited
-        if (msg.editedTimestamp.has_value()) {
-            m_messageView->append(
-                QString("<span style=\"color: %1; font-size: 11px;\">(edited)</span>")
-                    .arg(ThemeManager::instance().currentTheme().mute)
-            );
+            if (msg.editedTimestamp.has_value()) {
+                m_messageView->append(
+                    QString("<span style=\"color: %1; font-size: 11px;\">(edited)</span>")
+                        .arg(ThemeManager::instance().currentTheme().mute)
+                );
+            }
         }
 
-        // Only render content div if there's actual content
         if (!msg.content.isEmpty()) {
             QString contentHtml = DiscordMarkdown::toHtml(msg.content);
-            m_messageView->append(QString("<div class=\"message-content\">%1</div>").arg(contentHtml));
+            QString indent = isContinuation ? QStringLiteral(" style=\"margin-left: 0;\"") : QString();
+            m_messageView->append(QString("<div class=\"message-content\"%1>%2</div>").arg(indent, contentHtml));
         }
 
-        // Render embeds
         for (const auto &embed : msg.embeds) {
             m_messageView->append(EmbedRenderer::toHtml(embed));
         }
 
-        // Render attachments
         for (const auto &attachment : msg.attachments) {
             m_messageView->append(AttachmentRenderer::toHtml(attachment));
         }
 
-        // Show placeholder only if truly empty
         if (msg.content.isEmpty() && msg.embeds.isEmpty() && msg.attachments.isEmpty()) {
             m_messageView->append(
                 QString("<div class=\"message-content\" style=\"color: %1;\">[empty message]</div>")
@@ -592,6 +630,8 @@ private:
     Snowflake m_currentChannelId;
     QHash<QString, QTreeWidgetItem *> m_categoryItems;
     QString m_savedToken;
+    QString m_lastAuthorId;
+    int m_messageCount = 0;
 };
 
 int main(int argc, char *argv[])
