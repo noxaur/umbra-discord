@@ -34,8 +34,12 @@ QString EmbedRenderer::renderTitle(const Embed &embed)
 
     QString title = DiscordMarkdown::escapeHtml(embed.title.value());
     if (embed.url.has_value()) {
+        QString url = embed.url.value();
+        if (!isSafeUrl(url)) {
+            return QStringLiteral("<div class=\"embed-title\">%1</div>").arg(title);
+        }
         return QStringLiteral("<a href=\"%1\" class=\"embed-title\">%2</a>")
-            .arg(embed.url.value(), title);
+            .arg(url, title);
     }
     return QStringLiteral("<div class=\"embed-title\">%1</div>").arg(title);
 }
@@ -52,8 +56,11 @@ QString EmbedRenderer::renderThumbnail(const Embed &embed)
 {
     if (!embed.thumbnailUrl.has_value()) return QString();
 
+    QString url = embed.thumbnailUrl.value();
+    if (!isSafeUrl(url)) return QString();
+
     return QStringLiteral("<img src=\"%1\" class=\"embed-thumbnail\"/>")
-        .arg(embed.thumbnailUrl.value());
+        .arg(url);
 }
 
 QString EmbedRenderer::renderFields(const Embed &embed)
@@ -64,7 +71,7 @@ QString EmbedRenderer::renderFields(const Embed &embed)
 
     for (const auto &field : embed.fields) {
         QString inlineClass = field.inline_ ? QStringLiteral(" inline") : QString();
-        QString name = DiscordMarkdown::toHtml(DiscordMarkdown::escapeHtml(field.name));
+        QString name = DiscordMarkdown::escapeHtml(field.name);
         QString value = DiscordMarkdown::toHtml(field.value);
 
         html += QStringLiteral("<div class=\"embed-field%1\">"
@@ -98,4 +105,10 @@ QString EmbedRenderer::embedColorHex(const Embed &embed)
         .arg(r, 2, 16, QChar('0'))
         .arg(g, 2, 16, QChar('0'))
         .arg(b, 2, 16, QChar('0'));
+}
+
+bool EmbedRenderer::isSafeUrl(const QString &url)
+{
+    QString lower = url.toLower().trimmed();
+    return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("/");
 }

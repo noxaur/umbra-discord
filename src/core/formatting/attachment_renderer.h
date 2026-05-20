@@ -12,6 +12,7 @@ private:
     static bool isImage(const QString &filename);
     static bool isVideo(const QString &filename);
     static QString formatFileSize(int bytes);
+    static bool isSafeUrl(const QString &url);
 };
 
 #endif // ATTACHMENT_RENDERER_H
