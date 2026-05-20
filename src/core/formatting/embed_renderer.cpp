@@ -8,7 +8,7 @@ QString EmbedRenderer::toHtml(const Embed &embed)
 {
     QString color = embedColorHex(embed);
 
-    QString html = QStringLiteral("<div class=\"embed\" style=\"border-left-color: %1;\">").arg(color);
+    QString html = QStringLiteral("<div class=\"embed\" style=\"border-left: 4px solid %1;\">").arg(color);
 
     html += renderAuthor(embed);
     html += renderTitle(embed);
