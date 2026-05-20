@@ -39,6 +39,8 @@ add_executable(discord-qt MACOSX_BUNDLE
     src/core/gateway/gateway_client.cpp
     src/core/ui/theme.h
     src/core/ui/theme.cpp
+    src/core/formatting/discord_markdown.h
+    src/core/formatting/discord_markdown.cpp
 )
 
 set_target_properties(discord-qt PROPERTIES
