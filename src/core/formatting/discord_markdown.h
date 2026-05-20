@@ -24,7 +24,6 @@ private:
     static QString processMentions(const QString &text);
     static QString extractMentions(const QString &text, QMap<QString, QString> &placeholders);
     static QString extractTimestamps(const QString &text, QMap<QString, QString> &placeholders);
-    static QString processTimestamps(const QString &text);
     static QString formatDuration(qint64 seconds);
     static QString processAutoLinks(const QString &text);
 };

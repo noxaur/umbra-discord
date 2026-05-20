@@ -50,6 +50,7 @@ private:
         std::function<void()> callback;
     };
     QQueue<QueuedRequest> m_queue;
+    bool m_processing = false;
 };
 
 #endif // RATE_LIMITER_H

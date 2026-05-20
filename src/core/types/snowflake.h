@@ -16,8 +16,8 @@ public:
     bool isValid() const
     {
         bool ok = false;
-        m_value.toULongLong(&ok);
-        return ok && !m_value.isEmpty();
+        quint64 raw = m_value.toULongLong(&ok);
+        return ok && !m_value.isEmpty() && raw > 0;
     }
 
     QDateTime timestamp() const

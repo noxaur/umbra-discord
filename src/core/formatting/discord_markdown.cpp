@@ -336,55 +336,6 @@ QString DiscordMarkdown::extractMentions(const QString &text, QMap<QString, QStr
     return result;
 }
 
-QString DiscordMarkdown::processTimestamps(const QString &text)
-{
-    // <t:timestamp> or <t:timestamp:style>
-    QRegularExpression timestampRe(
-        QStringLiteral("<t:(\\d+)(?::([tTdDfFR]))?>")
-    );
-    QString result = text;
-
-    QRegularExpressionMatchIterator it = timestampRe.globalMatch(result);
-    QVector<std::tuple<int, int, QString>> replacements;
-
-    while (it.hasNext()) {
-        QRegularExpressionMatch match = it.next();
-        qint64 ts = match.captured(1).toLongLong();
-        QString style = match.captured(2);
-        if (style.isEmpty()) style = QStringLiteral("f");
-
-        QDateTime dt = QDateTime::fromSecsSinceEpoch(ts);
-        QString formatted;
-
-        switch (style.at(0).toLatin1()) {
-        case 't': formatted = dt.toString("HH:mm"); break;
-        case 'T': formatted = dt.toString("HH:mm:ss"); break;
-        case 'd': formatted = dt.toString("dd/MM/yyyy"); break;
-        case 'D': formatted = dt.toString("dd MMMM yyyy"); break;
-        case 'f': formatted = dt.toString("dd MMMM yyyy HH:mm"); break;
-        case 'F': formatted = dt.toString("dd MMMM yyyy HH:mm:ss"); break;
-        case 'R': {
-            qint64 diff = dt.secsTo(QDateTime::currentDateTime());
-            if (diff < 0) {
-                formatted = QStringLiteral("in %1").arg(formatDuration(-diff));
-            } else {
-                formatted = QStringLiteral("%1 ago").arg(formatDuration(diff));
-            }
-            break;
-        }
-        default: formatted = dt.toString("dd MMMM yyyy HH:mm"); break;
-        }
-
-        replacements.append({match.capturedStart(), match.capturedLength(), formatted});
-    }
-
-    for (int i = replacements.size() - 1; i >= 0; --i) {
-        result.replace(std::get<0>(replacements[i]), std::get<1>(replacements[i]), std::get<2>(replacements[i]));
-    }
-
-    return result;
-}
-
 QString DiscordMarkdown::extractTimestamps(const QString &text, QMap<QString, QString> &placeholders)
 {
     // <t:timestamp> or <t:timestamp:style>

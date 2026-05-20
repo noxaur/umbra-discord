@@ -57,33 +57,6 @@ QNetworkReply *RestClient::post(const QString &endpoint, const nlohmann::json &b
     return m_nam->post(request, QByteArray::fromStdString(body.dump()));
 }
 
-bool RestClient::checkRateLimit(const QString &endpoint, const QString &errorSignal)
-{
-    QString key = m_rateLimiter->bucketKey(endpoint);
-    if (!m_rateLimiter->canProceed(key))
-    {
-        qint64 retry = m_rateLimiter->retryAfterMs(key);
-        QString msg = retry > 0
-            ? QStringLiteral("Rate limited, retry after %1 ms").arg(retry)
-            : QStringLiteral("Rate limited");
-        qCWarning(discordRest) << "Rate limited:" << msg;
-        if (errorSignal == QStringLiteral("userError"))
-            emit userError(msg);
-        else if (errorSignal == QStringLiteral("gatewayUrlError"))
-            emit gatewayUrlError(msg);
-        else if (errorSignal == QStringLiteral("guildsError"))
-            emit guildsError(msg);
-        else if (errorSignal == QStringLiteral("guildChannelsError"))
-            emit guildChannelsError(msg);
-        else if (errorSignal == QStringLiteral("messagesError"))
-            emit messagesError(msg);
-        else if (errorSignal == QStringLiteral("messageSendError"))
-            emit messageSendError(msg);
-        return false;
-    }
-    return true;
-}
-
 void RestClient::updateRateLimits(QNetworkReply *reply)
 {
     auto header = reply->rawHeader("X-RateLimit-Bucket");

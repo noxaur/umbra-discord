@@ -63,6 +63,9 @@ void RateLimiter::queueRequest(const QString &bucket, std::function<void()> call
 
 void RateLimiter::processQueue()
 {
+    if (m_processing) return;
+    m_processing = true;
+
     QQueue<QueuedRequest> pending;
     while (!m_queue.isEmpty()) {
         pending.enqueue(m_queue.dequeue());
@@ -92,6 +95,8 @@ void RateLimiter::processQueue()
 
         req.callback();
     }
+
+    m_processing = false;
 }
 
 void RateLimiter::recordResponse(const QString &bucket, int limit, int remaining, qint64 resetAfterMs, bool isGlobal)
