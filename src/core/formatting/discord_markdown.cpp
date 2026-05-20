@@ -19,7 +19,10 @@ QString DiscordMarkdown::toHtml(const QString &markdown)
 
     QString result = markdown;
 
-    // Process code blocks first (to protect their content)
+    // Process inline code first (before code blocks to avoid double-wrapping)
+    result = processInlineCode(result);
+
+    // Process code blocks (to protect their content)
     result = processCodeBlocks(result);
 
     // Process blockquotes
@@ -28,8 +31,19 @@ QString DiscordMarkdown::toHtml(const QString &markdown)
     // Process lists
     result = processLists(result);
 
-    // Process inline elements
-    result = processInline(result);
+    // Process remaining inline elements (inline code already processed above)
+    result = processUnderline(result);  // __underline__ before **bold**
+    result = processBold(result);
+    result = processItalic(result);
+    result = processStrikethrough(result);
+    result = processSpoilers(result);
+    result = processLinks(result);
+    result = processMentions(result);
+    result = processTimestamps(result);
+    result = processAutoLinks(result);
+
+    // Convert remaining newlines to <br> outside block elements
+    result.replace(QRegularExpression("(?<!>)\\n(?!<)"), QStringLiteral("<br/>"));
 
     return result;
 }
@@ -46,7 +60,6 @@ QString DiscordMarkdown::processCodeBlocks(const QString &text)
     QRegularExpressionMatchIterator it = fencedRe.globalMatch(result);
     QVector<std::tuple<int, int, QString>> replacements;
 
-    int offset = 0;
     while (it.hasNext()) {
         QRegularExpressionMatch match = it.next();
         QString lang = match.captured(1);
@@ -72,7 +85,7 @@ QString DiscordMarkdown::processCodeBlocks(const QString &text)
 QString DiscordMarkdown::processBlockquotes(const QString &text)
 {
     QRegularExpression quoteRe(
-        QStringLiteral("^&gt;\\s+(.+)$"),
+        QStringLiteral("^>\\s+(.+)$"),
         QRegularExpression::MultilineOption
     );
 
@@ -97,7 +110,18 @@ QString DiscordMarkdown::processLists(const QString &text)
     );
 
     QString result = text;
-    result.replace(ulRe, QStringLiteral("<li>\\1</li>"));
+
+    // Escape HTML in list item content using tuple replacements
+    QRegularExpressionMatchIterator ulIt = ulRe.globalMatch(result);
+    QVector<std::tuple<int, int, QString>> ulReplacements;
+    while (ulIt.hasNext()) {
+        auto match = ulIt.next();
+        ulReplacements.append({match.capturedStart(), match.capturedLength(),
+            QStringLiteral("<li>%1</li>").arg(escapeHtml(match.captured(1)))});
+    }
+    for (int i = ulReplacements.size() - 1; i >= 0; --i) {
+        result.replace(std::get<0>(ulReplacements[i]), std::get<1>(ulReplacements[i]), std::get<2>(ulReplacements[i]));
+    }
 
     // Wrap consecutive <li> in <ul>
     QRegularExpression ulWrapRe(
@@ -111,26 +135,25 @@ QString DiscordMarkdown::processLists(const QString &text)
         QStringLiteral("^\\d+\\.\\s+(.+)$"),
         QRegularExpression::MultilineOption
     );
-    result.replace(olRe, QStringLiteral("<li>\\1</li>"));
 
-    return result;
-}
+    // Escape HTML in ordered list item content
+    QRegularExpressionMatchIterator olIt = olRe.globalMatch(result);
+    QVector<std::tuple<int, int, QString>> olReplacements;
+    while (olIt.hasNext()) {
+        auto match = olIt.next();
+        olReplacements.append({match.capturedStart(), match.capturedLength(),
+            QStringLiteral("<li>%1</li>").arg(escapeHtml(match.captured(1)))});
+    }
+    for (int i = olReplacements.size() - 1; i >= 0; --i) {
+        result.replace(std::get<0>(olReplacements[i]), std::get<1>(olReplacements[i]), std::get<2>(olReplacements[i]));
+    }
 
-QString DiscordMarkdown::processInline(const QString &text)
-{
-    QString result = text;
-
-    // Order matters: process code first, then bold/underline/italic/etc.
-    result = processInlineCode(result);
-    result = processUnderline(result);  // __underline__ before **bold**
-    result = processBold(result);
-    result = processItalic(result);
-    result = processStrikethrough(result);
-    result = processSpoilers(result);
-    result = processLinks(result);
-    result = processMentions(result);
-    result = processTimestamps(result);
-    result = processAutoLinks(result);
+    // Wrap consecutive <li> in <ol>
+    QRegularExpression olWrapRe(
+        QStringLiteral("((?:<li>.*</li>\\n?)+)"),
+        QRegularExpression::MultilineOption
+    );
+    result.replace(olWrapRe, QStringLiteral("<ol>\\1</ol>"));
 
     return result;
 }
@@ -140,19 +163,38 @@ QString DiscordMarkdown::processInlineCode(const QString &text)
     // Double backticks first (to handle single backticks inside)
     QRegularExpression doubleBacktickRe(QStringLiteral("``([^`]+)``"));
     QString result = text;
-    result.replace(doubleBacktickRe, QStringLiteral("<code>\\1</code>"));
+
+    QRegularExpressionMatchIterator it2 = doubleBacktickRe.globalMatch(result);
+    QVector<std::tuple<int, int, QString>> replacements2;
+    while (it2.hasNext()) {
+        auto match = it2.next();
+        replacements2.append({match.capturedStart(), match.capturedLength(),
+            QStringLiteral("<code>%1</code>").arg(escapeHtml(match.captured(1)))});
+    }
+    for (int i = replacements2.size() - 1; i >= 0; --i) {
+        result.replace(std::get<0>(replacements2[i]), std::get<1>(replacements2[i]), std::get<2>(replacements2[i]));
+    }
 
     // Single backticks
     QRegularExpression singleBacktickRe(QStringLiteral("`([^`]+)`"));
-    result.replace(singleBacktickRe, QStringLiteral("<code>\\1</code>"));
+    QRegularExpressionMatchIterator it1 = singleBacktickRe.globalMatch(result);
+    QVector<std::tuple<int, int, QString>> replacements1;
+    while (it1.hasNext()) {
+        auto match = it1.next();
+        replacements1.append({match.capturedStart(), match.capturedLength(),
+            QStringLiteral("<code>%1</code>").arg(escapeHtml(match.captured(1)))});
+    }
+    for (int i = replacements1.size() - 1; i >= 0; --i) {
+        result.replace(std::get<0>(replacements1[i]), std::get<1>(replacements1[i]), std::get<2>(replacements1[i]));
+    }
 
     return result;
 }
 
 QString DiscordMarkdown::processBold(const QString &text)
 {
-    // **bold**
-    QRegularExpression boldRe(QStringLiteral("\\*\\*(.+?)\\*\\*"));
+    // **bold** (don't match across newlines)
+    QRegularExpression boldRe(QStringLiteral("\\*\\*([^\\n]+?)\\*\\*"));
     QString result = text;
     result.replace(boldRe, QStringLiteral("<strong>\\1</strong>"));
 
@@ -161,13 +203,13 @@ QString DiscordMarkdown::processBold(const QString &text)
 
 QString DiscordMarkdown::processItalic(const QString &text)
 {
-    // *italic* or _italic_
-    QRegularExpression italicRe(QStringLiteral("\\*(.+?)\\*"));
+    // *italic* (don't match nested asterisks or across newlines)
+    QRegularExpression italicRe(QStringLiteral("\\*([^\\n*]+?)\\*"));
     QString result = text;
     result.replace(italicRe, QStringLiteral("<em>\\1</em>"));
 
     // Single underscore italic (not double)
-    QRegularExpression underscoreItalicRe(QStringLiteral("(?<!_)_(?!_)(.+?)(?<!_)_(?!_)"));
+    QRegularExpression underscoreItalicRe(QStringLiteral("(?<!_)_(?!_)([^\\n_]+?)(?<!_)_(?!_)"));
     result.replace(underscoreItalicRe, QStringLiteral("<em>\\1</em>"));
 
     return result;
@@ -216,12 +258,12 @@ QString DiscordMarkdown::processLinks(const QString &text)
 QString DiscordMarkdown::processMentions(const QString &text)
 {
     // <@userid>
-    QRegularExpression userMentionRe(QStringLiteral("&lt;@(\\d+)&gt;"));
+    QRegularExpression userMentionRe(QStringLiteral("<@(\\d+)>"));
     QString result = text;
     result.replace(userMentionRe, QStringLiteral("<span class=\"mention\">@%1</span>"));
 
     // <#channelid>
-    QRegularExpression channelMentionRe(QStringLiteral("&lt;#(\\d+)&gt;"));
+    QRegularExpression channelMentionRe(QStringLiteral("<#(\\d+)>"));
     result.replace(channelMentionRe, QStringLiteral("<span class=\"channel\">#%1</span>"));
 
     return result;
@@ -231,7 +273,7 @@ QString DiscordMarkdown::processTimestamps(const QString &text)
 {
     // <t:timestamp> or <t:timestamp:style>
     QRegularExpression timestampRe(
-        QStringLiteral("&lt;t:(\\d+)(?::([tTdDfFR]))?&gt;")
+        QStringLiteral("<t:(\\d+)(?::([tTdDfFR]))?>")
     );
     QString result = text;
 
@@ -278,10 +320,10 @@ QString DiscordMarkdown::processTimestamps(const QString &text)
 
 QString DiscordMarkdown::formatDuration(qint64 seconds)
 {
-    if (seconds < 60) return QStringLiteral("%1 seconds").arg(seconds);
-    if (seconds < 3600) return QStringLiteral("%1 minutes").arg(seconds / 60);
-    if (seconds < 86400) return QStringLiteral("%1 hours").arg(seconds / 3600);
-    return QStringLiteral("%1 days").arg(seconds / 86400);
+    if (seconds < 60) return seconds == 1 ? QStringLiteral("1 second") : QStringLiteral("%1 seconds").arg(seconds);
+    if (seconds < 3600) { qint64 m = seconds / 60; return m == 1 ? QStringLiteral("1 minute") : QStringLiteral("%1 minutes").arg(m); }
+    if (seconds < 86400) { qint64 h = seconds / 3600; return h == 1 ? QStringLiteral("1 hour") : QStringLiteral("%1 hours").arg(h); }
+    { qint64 d = seconds / 86400; return d == 1 ? QStringLiteral("1 day") : QStringLiteral("%1 days").arg(d); }
 }
 
 QString DiscordMarkdown::processAutoLinks(const QString &text)
