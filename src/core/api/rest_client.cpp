@@ -3,14 +3,26 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QLoggingCategory>
+#include <QAuthenticator>
 
 Q_LOGGING_CATEGORY(discordRest, "discord.rest")
+
+namespace {
+    constexpr const char *kUserAgent = "UmbraDiscord (https://github.com/noxaur/umbra-discord, 0.1.0)";
+}
 
 RestClient::RestClient(QObject *parent)
     : QObject(parent)
     , m_nam(new QNetworkAccessManager(this))
     , m_rateLimiter(new RateLimiter(this))
 {
+    // Prevent Qt from intercepting 401 responses as HTTP auth challenges.
+    // We handle Authorization ourselves via raw headers; Qt's built-in auth
+    // handler would otherwise swallow the 401 and emit AuthenticationRequiredError.
+    connect(m_nam, &QNetworkAccessManager::authenticationRequired,
+            this, [](QNetworkReply *, QAuthenticator *) {
+        // Do nothing — let the 401 pass through as a normal response
+    });
 }
 
 void RestClient::setToken(const QString &token)
@@ -23,9 +35,10 @@ QNetworkReply *RestClient::get(const QString &endpoint)
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
     qCDebug(discordRest) << "GET" << request.url().toString();
+    qCDebug(discordRest) << "Auth header set:" << (m_token.isEmpty() ? "EMPTY" : "Bot " + m_token.left(5) + "...");
     return m_nam->get(request);
 }
 
@@ -34,7 +47,7 @@ QNetworkReply *RestClient::post(const QString &endpoint, const nlohmann::json &b
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
     qCDebug(discordRest) << "POST" << request.url().toString();
     return m_nam->post(request, QByteArray::fromStdString(body.dump()));
@@ -114,12 +127,17 @@ void RestClient::fetchCurrentUser()
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
     request.setTransferTimeout(30000);
 
     qCDebug(discordRest) << "GET" << request.url().toString();
+    qCDebug(discordRest) << "Token length:" << m_token.length();
 
     QNetworkReply *reply = m_nam->get(request);
+    qCDebug(discordRest) << "Request headers:";
+    for (const auto &hdr : request.rawHeaderList())
+        qCDebug(discordRest) << "  " << hdr << "=" << request.rawHeader(hdr);
     QPointer<QNetworkReply> ptr(reply);
     connect(reply, &QNetworkReply::finished, this, [this, ptr]() {
         if (!ptr)
@@ -161,7 +179,7 @@ void RestClient::fetchGatewayUrl()
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
 
     qCDebug(discordRest) << "GET" << request.url().toString();
@@ -212,7 +230,7 @@ void RestClient::fetchGuilds()
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->get(request);
@@ -252,7 +270,7 @@ void RestClient::fetchGuildChannels(Snowflake guildId)
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->get(request);
@@ -292,7 +310,7 @@ void RestClient::fetchChannelMessages(Snowflake channelId, int limit, std::optio
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->get(request);
@@ -335,7 +353,7 @@ void RestClient::sendMessage(Snowflake channelId, const QString &content)
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", "DiscordBot (https://github.com/example/discord-qt, 0.1.0)");
+    request.setRawHeader("User-Agent", kUserAgent);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->post(request, QByteArray::fromStdString(body.dump()));
