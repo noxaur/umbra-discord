@@ -21,6 +21,9 @@
 #include <QSettings>
 #include <QToolButton>
 #include "core/client.h"
+#include "core/formatting/discord_markdown.h"
+#include "core/formatting/embed_renderer.h"
+#include "core/formatting/attachment_renderer.h"
 #include "core/ui/theme.h"
 
 class MainWindow : public QMainWindow
@@ -182,6 +185,9 @@ public:
 
         // Client setup
         m_client.setIntents(Intent::Guilds | Intent::GuildMessages | Intent::DirectMessages);
+
+        // Inject message CSS into QTextEdit document
+        m_messageView->document()->setDefaultStyleSheet(ThemeManager::instance().regenerateMessageCSS());
 
         // Signal connections
         connect(m_loginBtn, &QPushButton::clicked, this, &MainWindow::onLoginClicked);
@@ -502,17 +508,35 @@ private:
     {
         QString tag = msg.author.globalName.value_or(msg.author.username);
         QString timeStr = msg.timestamp.isValid() ? msg.timestamp.toString("HH:mm") : "";
-        QString text = msg.content.isEmpty() ? "<span style=\"color: #80848e;\">[embed/attachment]</span>" : msg.content;
 
-        QString html = QString(
-            "<div style=\"margin: 4px 0;\">"
-            "<span style=\"color: #5865f2; font-weight: 600;\">%1</span>"
-            "<span style=\"color: #80848e; font-size: 12px; margin-left: 6px;\">%2</span>"
-            "<br/>%3"
+        // Build message header
+        QString header = QString(
+            "<div class=\"message-content\" style=\"margin: 4px 0;\">"
+            "<span style=\"color: %1; font-weight: 600;\">%2</span>"
+            "<span style=\"color: %3; font-size: 12px; margin-left: 6px;\">%4</span>"
             "</div>"
-        ).arg(tag, timeStr, text);
+        ).arg(ThemeManager::instance().currentTheme().accentBlue,
+              tag,
+              ThemeManager::instance().currentTheme().mute,
+              timeStr);
 
-        m_messageView->append(html);
+        m_messageView->append(header);
+
+        // Render content with markdown
+        if (!msg.content.isEmpty()) {
+            QString contentHtml = DiscordMarkdown::toHtml(msg.content);
+            m_messageView->append(QString("<div class=\"message-content\">%1</div>").arg(contentHtml));
+        }
+
+        // Render embeds
+        for (const auto &embed : msg.embeds) {
+            m_messageView->append(EmbedRenderer::toHtml(embed));
+        }
+
+        // Render attachments
+        for (const auto &attachment : msg.attachments) {
+            m_messageView->append(AttachmentRenderer::toHtml(attachment));
+        }
     }
 
     Client m_client;
