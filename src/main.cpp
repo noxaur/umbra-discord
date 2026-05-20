@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QComboBox>
 #include <QTextEdit>
 #include <QTextCursor>
 #include <QStatusBar>
@@ -324,7 +325,7 @@ private slots:
         auto *dialog = new QDialog(this);
         dialog->setWindowTitle("Settings");
         dialog->setModal(true);
-        dialog->setFixedSize(400, 150);
+        dialog->setFixedSize(400, 200);
         dialog->setStyleSheet(
             "QDialog { background-color: #313338; color: #dbdee1; }"
             "QLabel { color: #dbdee1; font-size: 14px; }"
@@ -335,6 +336,18 @@ private slots:
 
         auto *layout = new QVBoxLayout(dialog);
         layout->setSpacing(12);
+
+        auto *themeLabel = new QLabel("Theme:", dialog);
+        layout->addWidget(themeLabel);
+
+        auto *themeCombo = new QComboBox(dialog);
+        themeCombo->addItems({"Raycast", "Discord"});
+        themeCombo->setCurrentText(ThemeManager::instance().currentTheme().name);
+        themeCombo->setStyleSheet(
+            "QComboBox { background-color: #1e1f22; color: #dbdee1; border: 1px solid #404249; border-radius: 4px; padding: 8px; }"
+            "QComboBox::drop-down { border: none; }"
+        );
+        layout->addWidget(themeCombo);
 
         auto *label = new QLabel("Bot Token:", dialog);
         layout->addWidget(label);
@@ -357,7 +370,15 @@ private slots:
         layout->addLayout(btnLayout);
 
         connect(cancelBtn, &QPushButton::clicked, dialog, &QDialog::reject);
-        connect(saveBtn, &QPushButton::clicked, this, [this, dialog, tokenEdit]() {
+        connect(saveBtn, &QPushButton::clicked, this, [this, dialog, tokenEdit, themeCombo]() {
+            QString newTheme = themeCombo->currentText();
+            if (newTheme != ThemeManager::instance().currentTheme().name) {
+                ThemeManager::instance().setTheme(newTheme);
+                QSettings settings("Umbra", "discord-qt");
+                settings.setValue("theme_name", newTheme);
+                qApp->setStyleSheet(ThemeManager::instance().regenerateQSS());
+            }
+
             QString newToken = tokenEdit->text().trimmed();
             if (!newToken.isEmpty()) {
                 m_savedToken = newToken;
