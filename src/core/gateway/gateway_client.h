@@ -40,6 +40,8 @@ public:
 
 signals:
     void ready(const User &self, const QList<Guild> &guilds, const QString &sessionId);
+    void guildAvailable(const Guild &guild);
+    void channelAvailable(const Channel &channel);
     void messageCreate(const Message &msg);
     void messageUpdate(Snowflake id, Snowflake channelId, const QString &newContent);
     void messageDelete(Snowflake id, Snowflake channelId);

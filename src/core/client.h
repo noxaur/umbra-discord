@@ -17,6 +17,7 @@ public:
 
     void setIntents(Intents intents);
     Cache *cache() const;
+    RestClient *rest() const { return m_rest; }
 
 public slots:
     void login(const QString &token);
@@ -27,6 +28,9 @@ public slots:
 
 signals:
     void ready();
+    void guildAdded(const Guild &guild);
+    void channelAdded(const Channel &channel);
+    void messagesLoaded(const QList<Message> &messages);
     void messageReceived(const Message &msg);
     void messageUpdated(Snowflake channelId, Snowflake messageId);
     void messageDeleted(Snowflake channelId, Snowflake messageId);
@@ -37,9 +41,12 @@ signals:
 private:
     void wireSignals();
     void onReady(const User &self, const QList<Guild> &guilds, const QString &sessionId);
+    void onGuildAvailable(const Guild &guild);
+    void onChannelAvailable(const Channel &channel);
     void onGuildsReady(const QList<Guild> &guilds);
     void onGuildChannelsReady(Snowflake guildId, const QList<Channel> &channels);
     void onChannelMessagesReady(const QList<Message> &messages);
+    void onMessageSent(const Message &msg);
     void onMessageCreate(const Message &msg);
     void onMessageUpdate(Snowflake id, Snowflake channelId, const QString &newContent);
     void onMessageDelete(Snowflake id, Snowflake channelId);

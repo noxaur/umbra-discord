@@ -73,8 +73,12 @@ void Client::wireSignals()
     connect(m_rest, &RestClient::guildsReady, this, &Client::onGuildsReady);
     connect(m_rest, &RestClient::guildChannelsReady, this, &Client::onGuildChannelsReady);
     connect(m_rest, &RestClient::messagesReady, this, &Client::onChannelMessagesReady);
+    connect(m_rest, &RestClient::messageSent, this, &Client::onMessageSent);
+    connect(m_rest, &RestClient::messageSendError, this, &Client::onRestError);
 
     connect(m_gateway, &GatewayClient::ready, this, &Client::onReady);
+    connect(m_gateway, &GatewayClient::guildAvailable, this, &Client::onGuildAvailable);
+    connect(m_gateway, &GatewayClient::channelAvailable, this, &Client::onChannelAvailable);
     connect(m_gateway, &GatewayClient::messageCreate, this, &Client::onMessageCreate);
     connect(m_gateway, &GatewayClient::messageUpdate, this, &Client::onMessageUpdate);
     connect(m_gateway, &GatewayClient::messageDelete, this, &Client::onMessageDelete);
@@ -91,13 +95,34 @@ void Client::wireSignals()
 void Client::onReady(const User &self, const QList<Guild> &guilds, const QString &sessionId)
 {
     Q_UNUSED(sessionId);
+    qDebug() << "[Client] onReady: user=" << self.username << "guilds=" << guilds.size();
     m_cache->setSelf(self);
     for (const auto &guild : guilds) {
-        m_cache->upsertGuild(guild);
-        // Fetch channels for each guild via REST
+        if (!guild.unavailable) {
+            m_cache->upsertGuild(guild);
+        }
+    }
+    qDebug() << "[Client] Emitting ready() signal";
+    emit ready();
+}
+
+void Client::onGuildAvailable(const Guild &guild)
+{
+    qDebug() << "[Client] Guild available:" << guild.name << guild.id.toString();
+    m_cache->upsertGuild(guild);
+    emit guildAdded(guild);
+
+    auto channels = m_cache->guildChannels(guild.id);
+    if (channels.isEmpty()) {
         m_rest->fetchGuildChannels(guild.id);
     }
-    emit ready();
+}
+
+void Client::onChannelAvailable(const Channel &channel)
+{
+    qDebug() << "[Client] Channel available:" << channel.name << channel.id.toString();
+    m_cache->upsertChannel(channel);
+    emit channelAdded(channel);
 }
 
 void Client::onGuildsReady(const QList<Guild> &guilds)
@@ -119,11 +144,20 @@ void Client::onChannelMessagesReady(const QList<Message> &messages)
     for (const auto &msg : messages) {
         m_cache->insertMessage(msg);
     }
+    emit messagesLoaded(messages);
+}
+
+void Client::onMessageSent(const Message &msg)
+{
+    m_cache->insertMessage(msg);
 }
 
 void Client::onMessageCreate(const Message &msg)
 {
-    m_cache->insertMessage(msg);
+    auto existing = m_cache->message(msg.channelId, msg.id);
+    if (!existing.has_value()) {
+        m_cache->insertMessage(msg);
+    }
     emit messageReceived(msg);
 }
 

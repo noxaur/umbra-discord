@@ -181,7 +181,7 @@ void GatewayClient::onTextMessageReceived(const QString &message)
             auto opcode = static_cast<GatewayOpcode>(json["op"].get<int>());
             switch (opcode) {
             case GatewayOpcode::Dispatch:
-                handleDispatch(json["d"]);
+                handleDispatch(json);
                 break;
             case GatewayOpcode::Hello:
                 handleHello(json["d"]);
@@ -226,6 +226,7 @@ void GatewayClient::handleDispatch(const nlohmann::json &payload)
 {
     if (payload.contains("t") && payload.contains("d")) {
         QString eventType = QString::fromStdString(payload["t"].get<std::string>());
+        qCDebug(discordGateway) << "Event:" << eventType;
         processEvent(eventType, payload["d"]);
     }
 }
@@ -302,6 +303,16 @@ void GatewayClient::processEvent(const QString &eventType, const nlohmann::json 
         }
         setState(State::Ready);
         emit ready(self, guilds, m_session.sessionId);
+    } else if (eventType == "GUILD_CREATE") {
+        if (!data.value("unavailable", false)) {
+            Guild guild = JsonParser::parseGuild(data);
+            emit guildAvailable(guild);
+            if (data.contains("channels") && data["channels"].is_array()) {
+                for (const auto &c : data["channels"]) {
+                    emit channelAvailable(JsonParser::parseChannel(c));
+                }
+            }
+        }
     } else if (eventType == "MESSAGE_CREATE") {
         Message msg = JsonParser::parseMessage(data);
         emit messageCreate(msg);
