@@ -1,0 +1,17 @@
+# Build directory
+build/
+
+# IDE
+.DS_Store
+*.swp
+*~
+.idea/
+*.pro.user*
+
+# Hive internal
+.hive/
+.logs/
+
+# macOS
+.DS_Store
+._*
