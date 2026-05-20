@@ -6,9 +6,9 @@
 class DiscordMarkdown {
 public:
     static QString toHtml(const QString &markdown);
+    static QString escapeHtml(const QString &text);
 
 private:
-    static QString escapeHtml(const QString &text);
     static QString processInline(const QString &text);
     static QString processCodeBlocks(const QString &text);
     static QString processBlockquotes(const QString &text);
