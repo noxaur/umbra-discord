@@ -43,6 +43,8 @@ add_executable(discord-qt MACOSX_BUNDLE
     src/core/formatting/discord_markdown.cpp
     src/core/formatting/embed_renderer.h
     src/core/formatting/embed_renderer.cpp
+    src/core/formatting/attachment_renderer.h
+    src/core/formatting/attachment_renderer.cpp
 )
 
 set_target_properties(discord-qt PROPERTIES
