@@ -506,7 +506,7 @@ private slots:
 private:
     void appendMessage(const Message &msg)
     {
-        QString tag = msg.author.globalName.value_or(msg.author.username);
+        QString tag = DiscordMarkdown::escapeHtml(msg.author.globalName.value_or(msg.author.username));
         QString timeStr = msg.timestamp.isValid() ? msg.timestamp.toString("HH:mm") : "";
 
         // Build message header

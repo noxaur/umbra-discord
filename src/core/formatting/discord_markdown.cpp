@@ -19,10 +19,14 @@ QString DiscordMarkdown::toHtml(const QString &markdown)
 
     QString result = markdown;
 
-    // Process inline code first (before code blocks to avoid double-wrapping)
-    result = processInlineCode(result);
+    // Process mentions and timestamps FIRST (they use <...> syntax)
+    result = processMentions(result);
+    result = processTimestamps(result);
 
-    // Process code blocks (to protect their content)
+    // Escape ALL HTML to prevent XSS
+    result = escapeHtml(result);
+
+    // Process code blocks
     result = processCodeBlocks(result);
 
     // Process blockquotes
@@ -31,15 +35,13 @@ QString DiscordMarkdown::toHtml(const QString &markdown)
     // Process lists
     result = processLists(result);
 
-    // Process remaining inline elements (inline code already processed above)
-    result = processUnderline(result);  // __underline__ before **bold**
+    // Process remaining inline elements
+    result = processUnderline(result);
     result = processBold(result);
     result = processItalic(result);
     result = processStrikethrough(result);
     result = processSpoilers(result);
     result = processLinks(result);
-    result = processMentions(result);
-    result = processTimestamps(result);
     result = processAutoLinks(result);
 
     // Convert remaining newlines to <br> outside block elements
@@ -245,12 +247,35 @@ QString DiscordMarkdown::processSpoilers(const QString &text)
     return result;
 }
 
+static bool isSafeUrl(const QString &url)
+{
+    QString lower = url.toLower().trimmed();
+    return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("/");
+}
+
 QString DiscordMarkdown::processLinks(const QString &text)
 {
-    // [text](url)
     QRegularExpression linkRe(QStringLiteral("\\[([^\\]]+)\\]\\(([^)]+)\\)"));
     QString result = text;
-    result.replace(linkRe, QStringLiteral("<a href=\"\\2\">\\1</a>"));
+
+    QRegularExpressionMatchIterator it = linkRe.globalMatch(result);
+    QVector<std::tuple<int, int, QString>> replacements;
+
+    while (it.hasNext()) {
+        auto match = it.next();
+        QString linkText = match.captured(1);
+        QString url = match.captured(2);
+        if (!isSafeUrl(url)) {
+            replacements.append({match.capturedStart(), match.capturedLength(), linkText});
+        } else {
+            replacements.append({match.capturedStart(), match.capturedLength(),
+                QStringLiteral("<a href=\"%1\">%2</a>").arg(url, linkText)});
+        }
+    }
+
+    for (int i = replacements.size() - 1; i >= 0; --i) {
+        result.replace(std::get<0>(replacements[i]), std::get<1>(replacements[i]), std::get<2>(replacements[i]));
+    }
 
     return result;
 }
@@ -328,13 +353,27 @@ QString DiscordMarkdown::formatDuration(qint64 seconds)
 
 QString DiscordMarkdown::processAutoLinks(const QString &text)
 {
-    // Auto-link bare URLs (not already inside <a> tags)
     QRegularExpression urlRe(
         QStringLiteral("(?<!href=\")\\b(https?://[^\\s<]+)"),
         QRegularExpression::CaseInsensitiveOption
     );
     QString result = text;
-    result.replace(urlRe, QStringLiteral("<a href=\"\\1\">\\1</a>"));
+
+    QRegularExpressionMatchIterator it = urlRe.globalMatch(result);
+    QVector<std::tuple<int, int, QString>> replacements;
+
+    while (it.hasNext()) {
+        auto match = it.next();
+        QString url = match.captured(1);
+        if (isSafeUrl(url)) {
+            replacements.append({match.capturedStart(), match.capturedLength(),
+                QStringLiteral("<a href=\"%1\">%1</a>").arg(url)});
+        }
+    }
+
+    for (int i = replacements.size() - 1; i >= 0; --i) {
+        result.replace(std::get<0>(replacements[i]), std::get<1>(replacements[i]), std::get<2>(replacements[i]));
+    }
 
     return result;
 }
