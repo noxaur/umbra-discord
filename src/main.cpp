@@ -543,7 +543,15 @@ private:
 
         m_messageView->append(header);
 
-        // Render content with markdown
+        // Show edited indicator if message was edited
+        if (msg.editedTimestamp.has_value()) {
+            m_messageView->append(
+                QString("<span style=\"color: %1; font-size: 11px;\">(edited)</span>")
+                    .arg(ThemeManager::instance().currentTheme().mute)
+            );
+        }
+
+        // Only render content div if there's actual content
         if (!msg.content.isEmpty()) {
             QString contentHtml = DiscordMarkdown::toHtml(msg.content);
             m_messageView->append(QString("<div class=\"message-content\">%1</div>").arg(contentHtml));
@@ -557,6 +565,14 @@ private:
         // Render attachments
         for (const auto &attachment : msg.attachments) {
             m_messageView->append(AttachmentRenderer::toHtml(attachment));
+        }
+
+        // Show placeholder only if truly empty
+        if (msg.content.isEmpty() && msg.embeds.isEmpty() && msg.attachments.isEmpty()) {
+            m_messageView->append(
+                QString("<div class=\"message-content\" style=\"color: %1;\">[empty message]</div>")
+                    .arg(ThemeManager::instance().currentTheme().mute)
+            );
         }
     }
 
