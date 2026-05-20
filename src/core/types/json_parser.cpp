@@ -75,6 +75,16 @@ Embed JsonParser::parseEmbed(const nlohmann::json &json)
     }
     if (json.contains("footer") && !json["footer"].is_null() && json["footer"].contains("text"))
         embed.footerText = QString::fromStdString(json["footer"]["text"].get<std::string>());
+    if (json.contains("author") && !json["author"].is_null())
+    {
+        const auto &author = json["author"];
+        if (author.contains("name") && !author["name"].is_null())
+            embed.authorName = QString::fromStdString(author["name"].get<std::string>());
+        if (author.contains("url") && !author["url"].is_null())
+            embed.authorUrl = QString::fromStdString(author["url"].get<std::string>());
+        if (author.contains("icon_url") && !author["icon_url"].is_null())
+            embed.authorIconUrl = QString::fromStdString(author["icon_url"].get<std::string>());
+    }
     if (json.contains("fields") && json["fields"].is_array())
     {
         for (const auto &f : json["fields"])

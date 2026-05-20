@@ -13,13 +13,24 @@ public:
 
     QString toString() const { return m_value; }
 
+    bool isValid() const
+    {
+        bool ok = false;
+        m_value.toULongLong(&ok);
+        return ok && !m_value.isEmpty();
+    }
+
     QDateTime timestamp() const
     {
-        qint64 ms = (m_value.toULongLong() >> 22) + 1420070400000;
+        bool ok = false;
+        quint64 raw = m_value.toULongLong(&ok);
+        if (!ok) return QDateTime();
+        qint64 ms = (raw >> 22) + 1420070400000;
         return QDateTime::fromMSecsSinceEpoch(ms);
     }
 
     bool operator<(const Snowflake &other) const { return m_value < other.m_value; }
+    bool operator>(const Snowflake &other) const { return m_value > other.m_value; }
     bool operator==(const Snowflake &other) const { return m_value == other.m_value; }
     bool operator!=(const Snowflake &other) const { return !(*this == other); }
 

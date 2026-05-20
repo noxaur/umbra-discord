@@ -53,7 +53,7 @@ QList<Message> Cache::channelMessages(Snowflake channelId, int limit) const
     std::sort(messages.begin(), messages.end(),
               [](const Message &a, const Message &b)
               {
-                  return a.timestamp > b.timestamp;
+                  return a.id > b.id;
               });
 
     if (messages.size() > limit)

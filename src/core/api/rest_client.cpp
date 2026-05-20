@@ -30,12 +30,17 @@ void RestClient::setToken(const QString &token)
     m_token = token;
 }
 
+void RestClient::applyAuthHeaders(QNetworkRequest &request) const
+{
+    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
+    request.setRawHeader("User-Agent", kUserAgent);
+}
+
 QNetworkReply *RestClient::get(const QString &endpoint)
 {
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
     qCDebug(discordRest) << "GET" << request.url().toString();
     qCDebug(discordRest) << "Auth header set:" << (m_token.isEmpty() ? "EMPTY" : "Bot " + m_token.left(5) + "...");
@@ -46,8 +51,7 @@ QNetworkReply *RestClient::post(const QString &endpoint, const nlohmann::json &b
 {
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
     qCDebug(discordRest) << "POST" << request.url().toString();
     return m_nam->post(request, QByteArray::fromStdString(body.dump()));
@@ -121,14 +125,15 @@ nlohmann::json RestClient::parseJson(QNetworkReply *reply)
 void RestClient::fetchCurrentUser()
 {
     QString endpoint = Routes::currentUser();
-    if (!checkRateLimit(endpoint, QStringLiteral("userError")))
+    QString bucket = m_rateLimiter->bucketKey(endpoint);
+    if (!m_rateLimiter->canProceed(bucket)) {
+        m_rateLimiter->queueRequest(bucket, [this]() { fetchCurrentUser(); });
         return;
+    }
 
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
-    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
 
     qCDebug(discordRest) << "GET" << request.url().toString();
@@ -173,13 +178,15 @@ void RestClient::fetchCurrentUser()
 void RestClient::fetchGatewayUrl()
 {
     QString endpoint = Routes::gatewayBot();
-    if (!checkRateLimit(endpoint, QStringLiteral("gatewayUrlError")))
+    QString bucket = m_rateLimiter->bucketKey(endpoint);
+    if (!m_rateLimiter->canProceed(bucket)) {
+        m_rateLimiter->queueRequest(bucket, [this]() { fetchGatewayUrl(); });
         return;
+    }
 
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
 
     qCDebug(discordRest) << "GET" << request.url().toString();
@@ -224,13 +231,15 @@ void RestClient::fetchGatewayUrl()
 void RestClient::fetchGuilds()
 {
     QString endpoint = Routes::guilds();
-    if (!checkRateLimit(endpoint, QStringLiteral("guildsError")))
+    QString bucket = m_rateLimiter->bucketKey(endpoint);
+    if (!m_rateLimiter->canProceed(bucket)) {
+        m_rateLimiter->queueRequest(bucket, [this]() { fetchGuilds(); });
         return;
+    }
 
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->get(request);
@@ -264,13 +273,15 @@ void RestClient::fetchGuilds()
 void RestClient::fetchGuildChannels(Snowflake guildId)
 {
     QString endpoint = Routes::guildChannels(guildId);
-    if (!checkRateLimit(endpoint, QStringLiteral("guildChannelsError")))
+    QString bucket = m_rateLimiter->bucketKey(endpoint);
+    if (!m_rateLimiter->canProceed(bucket)) {
+        m_rateLimiter->queueRequest(bucket, [this, guildId]() { fetchGuildChannels(guildId); });
         return;
+    }
 
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->get(request);
@@ -304,13 +315,17 @@ void RestClient::fetchGuildChannels(Snowflake guildId)
 void RestClient::fetchChannelMessages(Snowflake channelId, int limit, std::optional<Snowflake> before, std::optional<Snowflake> after)
 {
     QString endpoint = Routes::channelMessages(channelId, limit, before, after);
-    if (!checkRateLimit(endpoint, QStringLiteral("messagesError")))
+    QString bucket = m_rateLimiter->bucketKey(endpoint);
+    if (!m_rateLimiter->canProceed(bucket)) {
+        m_rateLimiter->queueRequest(bucket, [this, channelId, limit, before, after]() {
+            fetchChannelMessages(channelId, limit, before, after);
+        });
         return;
+    }
 
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->get(request);
@@ -344,16 +359,20 @@ void RestClient::fetchChannelMessages(Snowflake channelId, int limit, std::optio
 void RestClient::sendMessage(Snowflake channelId, const QString &content)
 {
     QString endpoint = Routes::sendMessage(channelId);
-    if (!checkRateLimit(endpoint, QStringLiteral("messageSendError")))
+    QString bucket = m_rateLimiter->bucketKey(endpoint);
+    if (!m_rateLimiter->canProceed(bucket)) {
+        m_rateLimiter->queueRequest(bucket, [this, channelId, content]() {
+            sendMessage(channelId, content);
+        });
         return;
+    }
 
     nlohmann::json body;
     body["content"] = content.toStdString();
 
     QNetworkRequest request(QUrl(Routes::baseUrl() + endpoint));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Authorization", QStringLiteral("Bot %1").arg(m_token).toUtf8());
-    request.setRawHeader("User-Agent", kUserAgent);
+    applyAuthHeaders(request);
     request.setTransferTimeout(30000);
 
     QNetworkReply *reply = m_nam->post(request, QByteArray::fromStdString(body.dump()));

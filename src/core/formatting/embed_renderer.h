@@ -16,7 +16,6 @@ private:
     static QString renderFields(const Embed &embed);
     static QString renderFooter(const Embed &embed);
     static QString embedColorHex(const Embed &embed);
-    static bool isSafeUrl(const QString &url);
 };
 
 #endif // EMBED_RENDERER_H

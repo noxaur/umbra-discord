@@ -45,6 +45,7 @@ signals:
     void messageSendError(QString error);
 
 private:
+    void applyAuthHeaders(QNetworkRequest &request) const;
     void updateRateLimits(QNetworkReply *reply);
     nlohmann::json parseJson(QNetworkReply *reply);
     bool checkRateLimit(const QString &endpoint, const QString &errorSignal);

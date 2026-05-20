@@ -86,6 +86,9 @@ struct Embed
     std::optional<QString> thumbnailUrl;
     std::optional<int> color;
     std::optional<QString> footerText;
+    std::optional<QString> authorName;
+    std::optional<QString> authorUrl;
+    std::optional<QString> authorIconUrl;
     QList<Field> fields;
 };
 
