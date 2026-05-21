@@ -147,6 +147,18 @@ public:
         sep->setMaximumHeight(1);
         mainLayout->addWidget(sep);
 
+        auto *loadMoreLayout = new QHBoxLayout();
+        loadMoreLayout->setContentsMargins(12, 8, 12, 4);
+        loadMoreLayout->addStretch();
+        m_loadMoreBtn = new QPushButton("Load older messages", mainWidget);
+        m_loadMoreBtn->setObjectName("loadMoreBtn");
+        m_loadMoreBtn->setVisible(false);
+        m_loadMoreBtn->setCursor(Qt::PointingHandCursor);
+        m_loadMoreBtn->setFixedHeight(32);
+        loadMoreLayout->addWidget(m_loadMoreBtn);
+        loadMoreLayout->addStretch();
+        mainLayout->addLayout(loadMoreLayout);
+
         // Message view
         m_messageView = new QTextEdit(mainWidget);
         m_messageView->setObjectName("messageView");
@@ -202,6 +214,7 @@ public:
         connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
         connect(m_messageInput, &QLineEdit::returnPressed, this, &MainWindow::onSendClicked);
         connect(m_settingsBtn, &QToolButton::clicked, this, &MainWindow::onSettingsClicked);
+        connect(m_loadMoreBtn, &QPushButton::clicked, this, &MainWindow::onLoadMoreClicked);
 
         connect(m_serverList, &QListWidget::currentRowChanged, this, &MainWindow::onServerSelected);
         connect(m_channelTree, &QTreeWidget::currentItemChanged, this, &MainWindow::onChannelTreeChanged);
@@ -298,22 +311,48 @@ private slots:
 
     void onMessagesLoaded(const QList<Message> &messages)
     {
-        m_messageView->clear();
-        m_lastAuthorId.clear();
-        m_messageCount = 0;
-        if (messages.isEmpty()) {
+        bool isPagination = m_isLoadingOlderMessages;
+        m_isLoadingOlderMessages = false;
+
+        if (!isPagination) {
+            m_messageView->clear();
+            m_lastAuthorId.clear();
+            m_messageCount = 0;
+        }
+
+        if (messages.isEmpty() && !isPagination) {
             m_messageView->append(
                 "<div class=\"empty-state\">"
                 "<div class=\"empty-state-title\">No messages yet</div>"
                 "<div class=\"empty-state-body\">Start the conversation in this channel.</div>"
                 "</div>"
             );
+            m_hasMoreMessages = false;
+            m_loadMoreBtn->setVisible(false);
             return;
         }
+
         for (const auto &msg : messages) {
             appendMessage(msg);
         }
-        m_messageView->moveCursor(QTextCursor::End);
+
+        if (!isPagination) {
+            m_messageView->moveCursor(QTextCursor::End);
+        }
+
+        if (messages.size() < 50) {
+            m_hasMoreMessages = false;
+        } else {
+            m_hasMoreMessages = true;
+        }
+
+        if (!messages.isEmpty()) {
+            m_oldestMessageId = messages.last().id;
+        }
+
+        m_loadMoreBtn->setVisible(m_hasMoreMessages);
+        m_loadMoreBtn->setEnabled(true);
+        m_loadMoreBtn->setText("Load older messages");
     }
 
     void onLoginClicked()
@@ -501,6 +540,11 @@ private slots:
         m_messageInput->setEnabled(true);
         m_sendBtn->setEnabled(true);
 
+        m_oldestMessageId.reset();
+        m_hasMoreMessages = false;
+        m_isLoadingOlderMessages = false;
+        m_loadMoreBtn->setVisible(false);
+
         m_messageView->clear();
         m_messageView->append(QString(
             "<div class=\"loading-skeleton\">"
@@ -511,6 +555,17 @@ private slots:
         ));
 
         m_client.fetchChannelMessages(channelId, 50);
+    }
+
+    void onLoadMoreClicked()
+    {
+        if (!m_oldestMessageId.has_value() || m_currentChannelId.toString().isEmpty()) return;
+
+        m_isLoadingOlderMessages = true;
+        m_loadMoreBtn->setEnabled(false);
+        m_loadMoreBtn->setText("Loading...");
+
+        m_client.fetchChannelMessages(m_currentChannelId, 50, m_oldestMessageId.value());
     }
 
     void onSendClicked()
@@ -627,11 +682,15 @@ private:
     QPushButton *m_sendBtn;
     QToolButton *m_settingsBtn;
     QTextEdit *m_messageView;
+    QPushButton *m_loadMoreBtn;
     Snowflake m_currentChannelId;
     QHash<QString, QTreeWidgetItem *> m_categoryItems;
     QString m_savedToken;
     QString m_lastAuthorId;
     int m_messageCount = 0;
+    std::optional<Snowflake> m_oldestMessageId;
+    bool m_hasMoreMessages = false;
+    bool m_isLoadingOlderMessages = false;
 };
 
 int main(int argc, char *argv[])
