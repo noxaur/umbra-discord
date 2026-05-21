@@ -8,6 +8,7 @@ set(CMAKE_AUTORCC ON)
 
 # Find Qt6
 find_package(Qt6 REQUIRED COMPONENTS Core Network WebSockets Widgets)
+find_package(Qt6Test REQUIRED)
 
 # Fetch nlohmann/json
 include(FetchContent)
@@ -64,3 +65,33 @@ target_link_libraries(discord-qt PRIVATE
     Qt6::Widgets
     nlohmann_json::nlohmann_json
 )
+
+# Common test sources
+set(TEST_SOURCES
+    src/core/formatting/discord_markdown.cpp
+    src/core/ui/theme.cpp
+    src/core/cache.cpp
+    src/core/api/rate_limiter.cpp
+    src/core/types/json_parser.cpp
+)
+
+# Test executables
+add_executable(test_markdown test/test_markdown.cpp ${TEST_SOURCES})
+target_link_libraries(test_markdown PRIVATE Qt6::Core Qt6::Network Qt6::Widgets Qt6::Test nlohmann_json::nlohmann_json)
+target_include_directories(test_markdown PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+add_executable(test_theme test/test_theme.cpp ${TEST_SOURCES})
+target_link_libraries(test_theme PRIVATE Qt6::Core Qt6::Network Qt6::Widgets Qt6::Test nlohmann_json::nlohmann_json)
+target_include_directories(test_theme PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+add_executable(test_cache test/test_cache.cpp ${TEST_SOURCES})
+target_link_libraries(test_cache PRIVATE Qt6::Core Qt6::Network Qt6::Widgets Qt6::Test nlohmann_json::nlohmann_json)
+target_include_directories(test_cache PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+add_executable(test_rate_limiter test/test_rate_limiter.cpp ${TEST_SOURCES})
+target_link_libraries(test_rate_limiter PRIVATE Qt6::Core Qt6::Network Qt6::Widgets Qt6::Test nlohmann_json::nlohmann_json)
+target_include_directories(test_rate_limiter PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+add_executable(test_snowflake test/test_snowflake.cpp ${TEST_SOURCES})
+target_link_libraries(test_snowflake PRIVATE Qt6::Core Qt6::Network Qt6::Widgets Qt6::Test nlohmann_json::nlohmann_json)
+target_include_directories(test_snowflake PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/test)
