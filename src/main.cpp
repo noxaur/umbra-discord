@@ -627,11 +627,15 @@ private:
     QPushButton *m_sendBtn;
     QToolButton *m_settingsBtn;
     QTextEdit *m_messageView;
+    QPushButton *m_loadMoreBtn;
     Snowflake m_currentChannelId;
     QHash<QString, QTreeWidgetItem *> m_categoryItems;
     QString m_savedToken;
     QString m_lastAuthorId;
     int m_messageCount = 0;
+    std::optional<Snowflake> m_oldestMessageId;
+    bool m_hasMoreMessages = false;
+    bool m_isLoadingOlderMessages = false;
 };
 
 int main(int argc, char *argv[])
