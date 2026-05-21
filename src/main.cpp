@@ -23,6 +23,13 @@
 #include <QToolButton>
 #include <QGroupBox>
 #include <QTabWidget>
+#include <QPixmap>
+#include <QPainter>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QUrl>
+#include <QIcon>
 #include "core/client.h"
 #include "core/formatting/discord_markdown.h"
 #include "core/formatting/embed_renderer.h"
@@ -237,6 +244,7 @@ private slots:
         auto *item = new QListWidgetItem(guild.name, m_serverList);
         item->setData(Qt::UserRole, guild.id.toString());
         item->setToolTip(guild.name);
+        setGuildIcon(guild.id.toString(), guild.icon, guild.name, item);
 
         if (m_serverList->count() == 1) {
             m_serverList->setCurrentRow(0);
@@ -298,22 +306,48 @@ private slots:
 
     void onMessagesLoaded(const QList<Message> &messages)
     {
-        m_messageView->clear();
-        m_lastAuthorId.clear();
-        m_messageCount = 0;
-        if (messages.isEmpty()) {
+        bool isPagination = m_isLoadingOlderMessages;
+        m_isLoadingOlderMessages = false;
+
+        if (!isPagination) {
+            m_messageView->clear();
+            m_lastAuthorId.clear();
+            m_messageCount = 0;
+        }
+
+        if (messages.isEmpty() && !isPagination) {
             m_messageView->append(
                 "<div class=\"empty-state\">"
                 "<div class=\"empty-state-title\">No messages yet</div>"
                 "<div class=\"empty-state-body\">Start the conversation in this channel.</div>"
                 "</div>"
             );
+            m_hasMoreMessages = false;
+            m_loadMoreBtn->setVisible(false);
             return;
         }
+
         for (const auto &msg : messages) {
             appendMessage(msg);
         }
-        m_messageView->moveCursor(QTextCursor::End);
+
+        if (!isPagination) {
+            m_messageView->moveCursor(QTextCursor::End);
+        }
+
+        if (messages.size() < 50) {
+            m_hasMoreMessages = false;
+        } else {
+            m_hasMoreMessages = true;
+        }
+
+        if (!messages.isEmpty()) {
+            m_oldestMessageId = messages.last().id;
+        }
+
+        m_loadMoreBtn->setVisible(m_hasMoreMessages);
+        m_loadMoreBtn->setEnabled(true);
+        m_loadMoreBtn->setText("Load older messages");
     }
 
     void onLoginClicked()
@@ -440,6 +474,7 @@ private slots:
             auto *item = new QListWidgetItem(guild.name, m_serverList);
             item->setData(Qt::UserRole, guild.id.toString());
             item->setToolTip(guild.name);
+            setGuildIcon(guild.id.toString(), guild.icon, guild.name, item);
         }
 
         m_loginBarWidget->setVisible(false);
@@ -501,6 +536,11 @@ private slots:
         m_messageInput->setEnabled(true);
         m_sendBtn->setEnabled(true);
 
+        m_oldestMessageId.reset();
+        m_hasMoreMessages = false;
+        m_isLoadingOlderMessages = false;
+        m_loadMoreBtn->setVisible(false);
+
         m_messageView->clear();
         m_messageView->append(QString(
             "<div class=\"loading-skeleton\">"
@@ -511,6 +551,17 @@ private slots:
         ));
 
         m_client.fetchChannelMessages(channelId, 50);
+    }
+
+    void onLoadMoreClicked()
+    {
+        if (!m_oldestMessageId.has_value() || m_currentChannelId.toString().isEmpty()) return;
+
+        m_isLoadingOlderMessages = true;
+        m_loadMoreBtn->setEnabled(false);
+        m_loadMoreBtn->setText("Loading...");
+
+        m_client.fetchChannelMessages(m_currentChannelId, 50, m_oldestMessageId.value());
     }
 
     void onSendClicked()
@@ -614,7 +665,47 @@ private:
         }
     }
 
+    void setGuildIcon(const QString &guildId, const std::optional<QString> &iconHash, const QString &guildName, QListWidgetItem *item)
+    {
+        if (m_iconCache.contains(guildId)) {
+            item->setIcon(m_iconCache.value(guildId));
+            return;
+        }
+
+        if (iconHash.has_value() && !iconHash->isEmpty()) {
+            QString url = QString("https://cdn.discordapp.com/icons/%1/%2.png?size=64")
+                .arg(guildId, *iconHash);
+            QNetworkReply *reply = m_iconNam->get(QNetworkRequest(QUrl(url)));
+            connect(reply, &QNetworkReply::finished, this, [this, guildId, guildName, item, reply]() {
+                reply->deleteLater();
+                if (reply->error() == QNetworkReply::NoError) {
+                    QByteArray data = reply->readAll();
+                    QPixmap pixmap;
+                    if (pixmap.loadFromData(data)) {
+                        QIcon icon(pixmap.scaled(32, 32, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                        m_iconCache.insert(guildId, icon);
+                        item->setIcon(icon);
+                    } else {
+                        QIcon fallback(generateGuildAvatar(guildName, hashColor(guildId)));
+                        m_iconCache.insert(guildId, fallback);
+                        item->setIcon(fallback);
+                    }
+                } else {
+                    QIcon fallback(generateGuildAvatar(guildName, hashColor(guildId)));
+                    m_iconCache.insert(guildId, fallback);
+                    item->setIcon(fallback);
+                }
+            });
+        } else {
+            QIcon fallback(generateGuildAvatar(guildName, hashColor(guildId)));
+            m_iconCache.insert(guildId, fallback);
+            item->setIcon(fallback);
+        }
+    }
+
     Client m_client;
+    QNetworkAccessManager *m_iconNam = new QNetworkAccessManager(this);
+    QHash<QString, QIcon> m_iconCache;
     QListWidget *m_serverList;
     QTreeWidget *m_channelTree;
     QFrame *m_channelFrame;

@@ -3,6 +3,7 @@
 
 #include <QString>
 #include <QColor>
+#include <QPixmap>
 
 inline bool isSafeUrl(const QString &url)
 {
@@ -24,5 +25,7 @@ inline QColor hashColor(const QString &id)
     };
     return palette[h % 12];
 }
+
+QPixmap generateGuildAvatar(const QString &name, const QColor &color, int size = 32);
 
 #endif // UTILS_H

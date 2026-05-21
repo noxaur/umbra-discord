@@ -8,6 +8,7 @@ set(CMAKE_AUTORCC ON)
 
 # Find Qt6
 find_package(Qt6 REQUIRED COMPONENTS Core Network WebSockets Widgets)
+find_package(Qt6Test REQUIRED)
 
 # Fetch nlohmann/json
 include(FetchContent)
@@ -45,6 +46,8 @@ add_executable(discord-qt MACOSX_BUNDLE
     src/core/formatting/embed_renderer.cpp
     src/core/formatting/attachment_renderer.h
     src/core/formatting/attachment_renderer.cpp
+    src/core/utils.h
+    src/core/utils.cpp
 )
 
 set_target_properties(discord-qt PROPERTIES
@@ -64,3 +67,26 @@ target_link_libraries(discord-qt PRIVATE
     Qt6::Widgets
     nlohmann_json::nlohmann_json
 )
+
+# Tests
+add_executable(discord-qt-test
+    test/test_markdown.cpp
+    test/test_theme.cpp
+    test/test_cache.cpp
+    test/test_rate_limiter.cpp
+    test/test_snowflake.cpp
+    src/core/formatting/discord_markdown.cpp
+    src/core/ui/theme.cpp
+    src/core/cache.cpp
+    src/core/api/rate_limiter.cpp
+    src/core/types/json_parser.cpp
+)
+target_link_libraries(discord-qt-test PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::WebSockets
+    Qt6::Widgets
+    Qt6::Test
+    nlohmann_json::nlohmann_json
+)
+target_include_directories(discord-qt-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
